@@ -195,18 +195,14 @@ def admin_required(view):
         if not safe_next(nxt):
             nxt = "/"
 
-        # Keep HTTP Basic auth working for scripts / the API-style endpoints.
+        # Support HTTP Basic auth for API/script access.
+        # NEVER send a WWW-Authenticate challenge — that triggers the browser's
+        # native popup and hides the Flask login page entirely.
         auth = request.authorization
-        if auth:
-            if verify_credentials(auth.username, auth.password or ""):
-                return view(*args, **kwargs)
-            if request.method == "GET":
-                # A browser with stale cached credentials still gets the sign-in page,
-                # not a 401 loop / native browser popup.
-                return redirect(url_for("login", next=nxt))
-            return Response("Dashboard login required.", 401,
-                            {"WWW-Authenticate": 'Basic realm="Security dashboard"'})
+        if auth and verify_credentials(auth.username, auth.password or ""):
+            return view(*args, **kwargs)
 
+        # Always redirect to Flask login page (browsers and API clients alike).
         return redirect(url_for("login", next=nxt))
     return wrapper
 
