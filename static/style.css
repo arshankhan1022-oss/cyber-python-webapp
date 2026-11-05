@@ -1,0 +1,5 @@
+body { background: #f4f6f9; }
+.stat { font-size: 2rem; font-weight: 700; line-height: 1.1; }
+.alert-card { border-left: 4px solid #dc3545; }
+.alert-card.resolved { border-left-color: #adb5bd; opacity: .7; }
+th { font-weight: 600; font-size: .85rem; color: #6c757d; }

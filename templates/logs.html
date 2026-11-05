@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% from "_parts.html" import events_table %}
+{% block content %}
+<div class="card shadow-sm"><div class="card-body">
+  <h1 class="h5 mb-3">Login events (latest 100)</h1>{{ events_table(events) }}
+</div></div>
+{% endblock %}

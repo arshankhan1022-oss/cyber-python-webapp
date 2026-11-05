@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% from "_parts.html" import alert_card %}
+{% block content %}
+<h1 class="h5 mb-3">Alerts</h1>
+{% for a in alerts %}{{ alert_card(a, can_resolve=True) }}{% else %}<p class="text-muted">No alerts yet.</p>{% endfor %}
+{% endblock %}

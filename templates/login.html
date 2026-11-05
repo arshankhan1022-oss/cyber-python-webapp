@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="row justify-content-center"><div class="col-md-5">
+  <div class="card shadow-sm"><div class="card-body">
+    <h1 class="h5">Demo login</h1>
+    <p class="small text-muted">Test accounts: <code>admin</code> / <code>Admin@123</code> or <code>student</code> / <code>Student@123</code>. Every attempt is recorded (passwords never are).</p>
+    {% if result == 'ok' %}<div class="alert alert-success py-2">Login successful.</div>
+    {% elif result == 'fail' %}<div class="alert alert-danger py-2">Invalid username or password.</div>{% endif %}
+    <form method="post">
+      <div class="mb-3"><label class="form-label" for="u">Username</label>
+        <input id="u" name="username" class="form-control" required autocomplete="username"></div>
+      <div class="mb-3"><label class="form-label" for="p">Password</label>
+        <input id="p" name="password" type="password" class="form-control" autocomplete="current-password"></div>
+      <button class="btn btn-dark w-100">Sign in</button>
+    </form>
+  </div></div>
+</div></div>
+{% endblock %}

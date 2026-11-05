@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_parts.html" import events_table, alert_card %}
+{% block content %}
+<div class="row g-3 mb-3">
+  {% for label, value, color in [('Total events', c.total, 'primary'), ('Successful logins', c.success, 'success'),
+                                 ('Failed logins', c.failed, 'danger'), ('Active alerts', c.alerts, 'warning')] %}
+  <div class="col-6 col-lg-3">
+    <div class="card h-100 shadow-sm"><div class="card-body">
+      <div class="small fw-semibold text-{{ color }}">{{ label }}</div>
+      <div class="stat">{{ value }}</div>
+    </div></div>
+  </div>
+  {% endfor %}
+</div>
+
+<div class="card shadow-sm mb-3"><div class="card-body">
+  <h2 class="h6 mb-3">Logins in the last hour</h2>
+  <div style="height:220px"><canvas id="timeline" aria-label="Successful and failed logins per 5 minutes"></canvas></div>
+</div></div>
+
+<div class="row g-3">
+  <div class="col-lg-8">
+    <div class="card shadow-sm"><div class="card-body">
+      <h2 class="h6 mb-3">Recent events</h2>{{ events_table(events) }}
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card shadow-sm"><div class="card-body">
+      <h2 class="h6 mb-3">Alerts</h2>
+      {% for a in alerts %}{{ alert_card(a) }}{% else %}<p class="text-muted small mb-0">No alerts. {{ threshold }} failed logins from one source within {{ window }} minutes will raise one.</p>{% endfor %}
+    </div></div>
+  </div>
+</div>
+
+<div class="card shadow-sm mt-3"><div class="card-body">
+  <h2 class="h6">Generate test events</h2>
+  <form method="post" action="{{ url_for('simulate') }}" class="d-flex flex-wrap gap-2 align-items-center">
+    <label class="small text-muted" for="src">Test source</label>
+    <input id="src" name="source" class="form-control form-control-sm w-auto" value="203.0.113.7">
+    <button name="action" value="success" class="btn btn-sm btn-success">Successful login</button>
+    <button name="action" value="fail" class="btn btn-sm btn-outline-danger">Failed login</button>
+    <button name="action" value="burst" class="btn btn-sm btn-danger">{{ threshold }} failed logins</button>
+  </form>
+</div></div>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script>
+  const T = {{ timeline|tojson }};
+  new Chart(document.getElementById('timeline'), {
+    type: 'bar',
+    data: { labels: T.labels, datasets: [
+      { label: 'Successful', data: T.success, backgroundColor: '#198754' },
+      { label: 'Failed', data: T.failed, backgroundColor: '#dc3545' }] },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } },
+      scales: { x: { stacked: true, title: { display: true, text: 'Time (UTC)' } },
+                y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } }
+  });
+</script>
+{% endblock %}

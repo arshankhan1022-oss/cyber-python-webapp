@@ -1,0 +1,38 @@
+{% macro events_table(events) %}
+<table class="table table-sm align-middle mb-0">
+  <thead><tr><th>Time (UTC)</th><th>User</th><th>Status</th><th>Source</th></tr></thead>
+  <tbody>
+  {% for e in events %}
+    <tr>
+      <td>{{ e.timestamp|ts }}</td><td>{{ e.username }}</td>
+      <td><span class="badge {{ 'bg-success' if e.status == 'Success' else 'bg-danger' }}">{{ e.status }}</span></td>
+      <td>{{ e.source }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="4" class="text-center text-muted py-3">No events yet. Use the demo login or the test buttons.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
+{% macro alert_card(a, can_resolve=False) %}
+<div class="card alert-card {{ 'resolved' if a.status == 'Resolved' }} mb-2">
+  <div class="card-body py-2 d-flex justify-content-between align-items-start gap-2">
+    <div>
+      <div class="fw-semibold">{{ a.type }}</div>
+      <div class="small">{{ a.message }}</div>
+      <div class="small text-muted">{{ a.created_at|ts }} UTC</div>
+    </div>
+    <div class="text-end">
+      <span class="badge bg-danger">{{ a.severity }}</span>
+      <div class="small text-muted">{{ a.status }}</div>
+      {% if can_resolve and a.status == 'Open' %}
+      <form method="post" action="{{ url_for('resolve', alert_id=a.id) }}">
+        <input type="hidden" name="source" value="{{ a.source }}">
+        <button class="btn btn-sm btn-outline-secondary mt-1">Resolve</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endmacro %}
