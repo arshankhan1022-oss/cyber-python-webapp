@@ -6,8 +6,9 @@ Rule: **5 failed logins from one source within 5 minutes → "Suspicious Activit
 ## Pages
 | URL | Access | Purpose |
 |---|---|---|
-| `/login` | public | Demo target. Accounts `admin / Admin@123`, `student / Student@123`. Every attempt is logged (never the password). |
-| `/` `/logs` `/alerts` | dashboard login (`ADMIN_USER` / `ADMIN_PASSWORD`) | Counts, hourly chart (Chart.js), events, alerts, Resolve button, test-event buttons. |
+| `/login` | public | Sign-in form and demo target. Accounts `admin / Admin@123`, `student / Student@123` (or `ADMIN_USER` / `ADMIN_PASSWORD`). Every attempt is logged (never the password). A successful sign-in opens the dashboard. |
+| `/` `/logs` `/alerts` | sign-in required (session cookie, or HTTP Basic with `ADMIN_USER` / `ADMIN_PASSWORD`) | Counts, hourly chart (Chart.js), events, alerts, Resolve button, test-event buttons. |
+| `/logout` | public | Ends the dashboard session. |
 
 ## 1. Run locally (works without Azure)
 ```
@@ -31,7 +32,7 @@ az cosmosdb keys list -n cosmos-cybersecurity -g rg-cybersecurity-demo --query p
 ## 3. Deploy to App Service
 ```
 az webapp up -n cybersecurity-demo-app -g rg-cybersecurity-demo -l eastus --runtime "PYTHON:3.12" --sku B1
-az webapp config appsettings set -g rg-cybersecurity-demo -n cybersecurity-demo-app --settings COSMOS_ENDPOINT="<endpoint>" COSMOS_KEY="<key>" ADMIN_PASSWORD="<strong-password>"
+az webapp config appsettings set -g rg-cybersecurity-demo -n cybersecurity-demo-app --settings COSMOS_ENDPOINT="<endpoint>" COSMOS_KEY="<key>" ADMIN_PASSWORD="<strong-password>" SECRET_KEY="<random-long-string>"
 ```
 Check current pricing for your tier (F1 may work on a student subscription). If the app won't start, set the startup command to `gunicorn --bind=0.0.0.0 --timeout 600 app:app`.
 
@@ -65,7 +66,7 @@ Also useful for screenshots: Live metrics, Failures, Performance (requests are t
 Delivery failures are logged as warnings and never block logins.
 
 ## 7. Demo script
-1. `/login`: one correct sign-in, then 5 wrong ones. 2. Dashboard: show counts, chart bar, alert (and the email arriving). 3. Cosmos Data Explorer: `SELECT * FROM c ORDER BY c.timestamp DESC`. 4. Application Insights: run the `traces` query. 5. Resolve the alert on `/alerts`.
+1. `/login`: make 5 wrong attempts from the same source (the alert fires), then sign in with `admin / Admin@123` to open the dashboard. Use **Sign out** to return to the login form. 2. Dashboard: show counts, chart bar, alert (and the email arriving). 3. Cosmos Data Explorer: `SELECT * FROM c ORDER BY c.timestamp DESC`. 4. Application Insights: run the `traces` query. 5. Resolve the alert on `/alerts`.
 
 ## 8. Screenshots (report Chapter 4)
 Original 1–10 as before (Step 8 must show the `*.azurewebsites.net` URL), plus: chart on the dashboard, the alert email or Logic App run history, App Service **Identity** page, Cosmos **role assignment** output, Application Insights query result. Hide keys and connection strings.

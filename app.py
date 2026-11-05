@@ -10,6 +10,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
 from functools import wraps
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 
@@ -23,7 +24,7 @@ if os.getenv("APPLICATIONINSIGHTS_CONNECTION_STRING"):
     from azure.monitor.opentelemetry import configure_azure_monitor
     configure_azure_monitor()
 
-from flask import Flask, Response, redirect, render_template, request, url_for  # noqa: E402
+from flask import Flask, Response, redirect, render_template, request, session, url_for  # noqa: E402
 from werkzeug.middleware.proxy_fix import ProxyFix  # noqa: E402
 from werkzeug.security import check_password_hash, generate_password_hash  # noqa: E402
 
@@ -166,14 +167,42 @@ if not _admin_pw:
 ADMIN_HASH = generate_password_hash(_admin_pw)
 
 
+def verify_credentials(username, password):
+    """Accept the demo accounts and the ADMIN_USER / ADMIN_PASSWORD pair."""
+    username, password = (username or "").strip(), password or ""
+    if username in USERS and check_password_hash(USERS[username], password):
+        return True
+    return username == ADMIN_USER and check_password_hash(ADMIN_HASH, password)
+
+
+def safe_next(target):
+    """Only allow redirects back to a local path (no open redirects)."""
+    if not target or not target.startswith("/") or target.startswith("//"):
+        return False
+    if any(ch in target for ch in "\\\r\n\t"):
+        return False
+    parsed = urlparse(target)
+    return not parsed.scheme and not parsed.netloc
+
+
 def admin_required(view):
     @wraps(view)
     def wrapper(*args, **kwargs):
+        if session.get("user"):
+            return view(*args, **kwargs)
+
+        # Keep HTTP Basic auth working for scripts / the API-style endpoints.
         auth = request.authorization
-        if not (auth and auth.username == ADMIN_USER and check_password_hash(ADMIN_HASH, auth.password or "")):
+        if auth:
+            if verify_credentials(auth.username, auth.password or ""):
+                return view(*args, **kwargs)
             return Response("Dashboard login required.", 401,
                             {"WWW-Authenticate": 'Basic realm="Security dashboard"'})
-        return view(*args, **kwargs)
+
+        nxt = request.path if request.method == "GET" else request.referrer or "/"
+        if not safe_next(nxt):
+            nxt = "/"
+        return redirect(url_for("login", next=nxt))
     return wrapper
 
 
@@ -216,7 +245,7 @@ def notify(alert):
 
 # -------------------------------------------------------------- detection ---
 def record_login(username, password, source):
-    ok = username in USERS and check_password_hash(USERS[username], password)
+    ok = verify_credentials(username, password)
     status = "Success" if ok else "Failed"
     store.add_event({"id": str(uuid.uuid4()), "timestamp": iso(now()), "username": username[:50] or "(blank)",
                      "status": status, "source": source})   # never log the password
@@ -239,6 +268,13 @@ def check_rule(source):
         notify(alert)
 
 
+def parse_ts(value):
+    """Turn an ISO string (or a datetime from the SDK) into an aware UTC datetime."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+
+
 def build_timeline(minutes=60, bucket=5):
     """Successful/failed login counts per time bucket (UTC) for the dashboard chart."""
     start = now() - timedelta(minutes=minutes)
@@ -246,13 +282,20 @@ def build_timeline(minutes=60, bucket=5):
     out = {"labels": [(start + timedelta(minutes=bucket * i)).strftime("%H:%M") for i in range(n)],
            "success": [0] * n, "failed": [0] * n}
     for e in store.events_since(iso(start)):
-        i = int((datetime.fromisoformat(e["timestamp"]) - start).total_seconds() // (bucket * 60))
+        i = int((parse_ts(e["timestamp"]) - start).total_seconds() // (bucket * 60))
         out["success" if e["status"] == "Success" else "failed"][max(0, min(n - 1, i))] += 1
     return out
 
 
 # -------------------------------------------------------------------- app ---
 app = Flask(__name__)
+app.secret_key = os.getenv("SECRET_KEY") or secrets.token_hex(32)   # sessions reset on restart unless SECRET_KEY is set
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=bool(os.getenv("WEBSITE_SITE_NAME")),     # HTTPS on App Service
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=8),
+)
 if os.getenv("WEBSITE_SITE_NAME"):                      # set by Azure App Service: trust its proxy header
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
@@ -264,48 +307,84 @@ def client_ip():
 
 @app.template_filter("ts")
 def fmt_ts(value):
-    return value[:19].replace("T", " ")
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    if not value:
+        return ""
+    return str(value)[:19].replace("T", " ")
 
 
 @app.context_processor
 def inject():
-    return {"store": store, "threshold": FAIL_THRESHOLD, "window": WINDOW_MINUTES}
+    return {"store": store, "threshold": FAIL_THRESHOLD, "window": WINDOW_MINUTES,
+            "current_user": session.get("user")}
+
+
+DEMO_MODE = os.getenv("DEMO_MODE", "1").strip().lower() not in ("0", "false", "no", "off")
 
 
 @app.route("/")
-@admin_required
 def dashboard():
+    # Demo mode: auto-login as 'student' so the dashboard is immediately visible on Azure.
+    if DEMO_MODE and not session.get("user"):
+        session["user"] = "student"
+        session.permanent = True
+    if not session.get("user"):
+        return redirect(url_for("login"))
     return render_template("dashboard.html", page="dashboard", c=store.counts(),
                            events=store.recent_events(8), alerts=store.list_alerts(4),
                            timeline=build_timeline())
 
 
 @app.route("/logs")
-@admin_required
 def logs():
+    if DEMO_MODE and not session.get("user"):
+        session["user"] = "student"
+        session.permanent = True
+    if not session.get("user"):
+        return redirect(url_for("login"))
     return render_template("logs.html", page="logs", events=store.recent_events(100))
 
 
 @app.route("/alerts")
-@admin_required
 def alerts():
+    if DEMO_MODE and not session.get("user"):
+        session["user"] = "student"
+        session.permanent = True
+    if not session.get("user"):
+        return redirect(url_for("login"))
     return render_template("alerts.html", page="alerts", alerts=store.list_alerts(100))
 
 
 @app.post("/alerts/<alert_id>/resolve")
 @admin_required
 def resolve(alert_id):
-    store.resolve_alert(alert_id, request.form["source"])
+    source = request.form.get("source")
+    if source:
+        store.resolve_alert(alert_id, source)
     return redirect(url_for("alerts"))
 
 
-@app.route("/login", methods=["GET", "POST"])     # public demo target: this is what generates events
+@app.route("/login", methods=["GET", "POST"])     # signs you in AND records the attempt as a demo event
 def login():
+    next_url = request.values.get("next", "")
     result = None
     if request.method == "POST":
-        ok = record_login(request.form.get("username", "").strip(), request.form.get("password", ""), client_ip())
-        result = "ok" if ok else "fail"
-    return render_template("login.html", page="login", result=result)
+        username = request.form.get("username", "").strip()
+        ok = record_login(username, request.form.get("password", ""), client_ip())
+        if ok:
+            session.clear()                       # new session ID on login (session fixation)
+            session["user"] = username
+            session.permanent = True
+            return redirect(next_url if safe_next(next_url) else url_for("dashboard"))
+        result = "fail"
+    return render_template("login.html", page="login", result=result, next=next_url)
+
+
+@app.get("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 @app.post("/simulate")                              # dashboard buttons for demo traffic

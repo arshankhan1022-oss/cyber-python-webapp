@@ -2,17 +2,41 @@
 {% block content %}
 <div class="row justify-content-center"><div class="col-md-5">
   <div class="card shadow-sm"><div class="card-body">
-    <h1 class="h5">Demo login</h1>
-    <p class="small text-muted">Test accounts: <code>admin</code> / <code>Admin@123</code> or <code>student</code> / <code>Student@123</code>. Every attempt is recorded (passwords never are).</p>
-    {% if result == 'ok' %}<div class="alert alert-success py-2">Login successful.</div>
-    {% elif result == 'fail' %}<div class="alert alert-danger py-2">Invalid username or password.</div>{% endif %}
-    <form method="post">
-      <div class="mb-3"><label class="form-label" for="u">Username</label>
-        <input id="u" name="username" class="form-control" required autocomplete="username"></div>
-      <div class="mb-3"><label class="form-label" for="p">Password</label>
-        <input id="p" name="password" type="password" class="form-control" autocomplete="current-password"></div>
-      <button class="btn btn-dark w-100">Sign in</button>
-    </form>
+    <h1 class="h5">Sign in</h1>
+
+    {% if current_user %}
+      <p class="small text-muted">You are already signed in as <strong>{{ current_user }}</strong>.</p>
+      <a class="btn btn-dark" href="{{ url_for('dashboard') }}">Go to dashboard</a>
+      <a class="btn btn-outline-secondary" href="{{ url_for('logout') }}">Sign out</a>
+    {% else %}
+      <p class="small text-muted">
+        Signing in unlocks the dashboard. Every attempt is recorded as a login event
+        (passwords are never stored or logged).
+        Demo accounts: <code>admin</code> / <code>Admin@123</code> or
+        <code>student</code> / <code>Student@123</code>.
+      </p>
+
+      {% if result == 'fail' %}
+        <div class="alert alert-danger py-2">Invalid username or password.</div>
+      {% endif %}
+
+      <form method="post">
+        <input type="hidden" name="next" value="{{ next }}">
+        <div class="mb-3">
+          <label class="form-label" for="u">Username</label>
+          <input id="u" name="username" class="form-control" value="{{ request.form.get('username', '') }}" required autocomplete="username" autofocus>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="p">Password</label>
+          <input id="p" name="password" type="password" class="form-control" autocomplete="current-password" required>
+        </div>
+        <button class="btn btn-dark w-100">Sign in</button>
+      </form>
+
+      <p class="small text-muted mt-3 mb-0">
+        The <code>ADMIN_USER</code> / <code>ADMIN_PASSWORD</code> account also works here.
+      </p>
+    {% endif %}
   </div></div>
 </div></div>
 {% endblock %}
