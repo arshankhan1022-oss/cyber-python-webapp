@@ -191,17 +191,22 @@ def admin_required(view):
         if session.get("user"):
             return view(*args, **kwargs)
 
+        nxt = request.path if request.method == "GET" else request.referrer or "/"
+        if not safe_next(nxt):
+            nxt = "/"
+
         # Keep HTTP Basic auth working for scripts / the API-style endpoints.
         auth = request.authorization
         if auth:
             if verify_credentials(auth.username, auth.password or ""):
                 return view(*args, **kwargs)
+            if request.method == "GET":
+                # A browser with stale cached credentials still gets the sign-in page,
+                # not a 401 loop / native browser popup.
+                return redirect(url_for("login", next=nxt))
             return Response("Dashboard login required.", 401,
                             {"WWW-Authenticate": 'Basic realm="Security dashboard"'})
 
-        nxt = request.path if request.method == "GET" else request.referrer or "/"
-        if not safe_next(nxt):
-            nxt = "/"
         return redirect(url_for("login", next=nxt))
     return wrapper
 
@@ -320,39 +325,23 @@ def inject():
             "current_user": session.get("user")}
 
 
-DEMO_MODE = os.getenv("DEMO_MODE", "1").strip().lower() not in ("0", "false", "no", "off")
-
-
 @app.route("/")
+@admin_required
 def dashboard():
-    # Demo mode: auto-login as 'student' so the dashboard is immediately visible on Azure.
-    if DEMO_MODE and not session.get("user"):
-        session["user"] = "student"
-        session.permanent = True
-    if not session.get("user"):
-        return redirect(url_for("login"))
     return render_template("dashboard.html", page="dashboard", c=store.counts(),
                            events=store.recent_events(8), alerts=store.list_alerts(4),
                            timeline=build_timeline())
 
 
 @app.route("/logs")
+@admin_required
 def logs():
-    if DEMO_MODE and not session.get("user"):
-        session["user"] = "student"
-        session.permanent = True
-    if not session.get("user"):
-        return redirect(url_for("login"))
     return render_template("logs.html", page="logs", events=store.recent_events(100))
 
 
 @app.route("/alerts")
+@admin_required
 def alerts():
-    if DEMO_MODE and not session.get("user"):
-        session["user"] = "student"
-        session.permanent = True
-    if not session.get("user"):
-        return redirect(url_for("login"))
     return render_template("alerts.html", page="alerts", alerts=store.list_alerts(100))
 
 
